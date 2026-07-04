@@ -253,6 +253,7 @@ export default function App() {
     link: '',
     image: ''
   });
+  const [syncError, setSyncError] = useState('');
   const paletteRef = useRef(null);
   const addRef = useRef(null);
 
@@ -271,6 +272,11 @@ export default function App() {
               .eq('key', THEME_SETTING_KEY)
               .maybeSingle()
           ]);
+
+        if (itemsError) {
+          console.error('Supabase items load error:', itemsError);
+          setSyncError(`No se pudo cargar Supabase: ${itemsError.message}`);
+        }
 
         if (!itemsError && items) {
           setItemsByPerson(groupItemsByPerson(items));
@@ -371,11 +377,18 @@ export default function App() {
       return;
     }
 
-    await supabase.from('wishlist_settings').upsert({
+    const { error } = await supabase.from('wishlist_settings').upsert({
       key: THEME_SETTING_KEY,
       value: themeId,
       updated_at: new Date().toISOString()
     });
+
+    if (error) {
+      console.error('Supabase theme save error:', error);
+      setSyncError(`No se pudo guardar la paleta: ${error.message}`);
+    } else {
+      setSyncError('');
+    }
   }
 
   const activeItems = useMemo(
@@ -407,6 +420,7 @@ export default function App() {
 
   async function handleSubmit(event) {
     event.preventDefault();
+    setSyncError('');
 
     if (
       !formValues.name.trim() ||
@@ -436,6 +450,12 @@ export default function App() {
         .select()
         .single();
 
+      if (error) {
+        console.error('Supabase insert error:', error);
+        setSyncError(`No se pudo guardar: ${error.message}`);
+        return;
+      }
+
       if (!error && data) {
         setItemsByPerson((current) => addItemToPerson(current, data));
       }
@@ -451,7 +471,16 @@ export default function App() {
     setItemsByPerson((current) => removeItemFromPerson(current, item));
 
     if (hasSupabaseConfig) {
-      await supabase.from('wishlist_items').delete().eq('id', item.id);
+      const { error } = await supabase
+        .from('wishlist_items')
+        .delete()
+        .eq('id', item.id);
+
+      if (error) {
+        console.error('Supabase delete error:', error);
+        setSyncError(`No se pudo eliminar: ${error.message}`);
+        setItemsByPerson((current) => addItemToPerson(current, item));
+      }
     }
   }
 
@@ -666,6 +695,12 @@ export default function App() {
             )}
           </div>
         </div>
+
+        {syncError && (
+          <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {syncError}
+          </div>
+        )}
 
         {activeItems.length === 0 ? (
           <div
